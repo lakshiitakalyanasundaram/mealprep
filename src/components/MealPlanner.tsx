@@ -1,214 +1,250 @@
-
-import React, { useState } from 'react';
+import React, { useState, Children } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
-import { usePreferences } from '../context/PreferencesContext';
+import { Loader2, List, ChefHat, Info, Lightbulb, Utensils, Refrigerator, Apple } from "lucide-react";
+import { usePreferences, MealType } from '../context/PreferencesContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PreferencesForm from './PreferencesForm';
+import { sendChatMessage } from '@/services/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+const sectionIcons: Record<string, React.ReactNode> = {
+  ingredients: <Apple className="inline mr-2 text-green-600" size={20} />,
+  instructions: <Utensils className="inline mr-2 text-blue-600" size={20} />,
+  tips: <Lightbulb className="inline mr-2 text-yellow-500" size={20} />,
+  nutrition: <Info className="inline mr-2 text-pink-500" size={20} />,
+  storage: <Refrigerator className="inline mr-2 text-cyan-600" size={20} />,
+};
+
+const highlightSection = (text: string) => {
+  // Convert markdown headings to ### Heading format (no icons)
+  return text
+    .replace(/\*\*Ingredients:\*\*/gi, `### Ingredients`)
+    .replace(/\*\*Step-by-step Instructions:\*\*/gi, `### Instructions`)
+    .replace(/\*\*Instructions:\*\*/gi, `### Instructions`)
+    .replace(/\*\*Tips for Success:\*\*/gi, `### Tips for Success`)
+    .replace(/\*\*Nutritional Information.*\*\*/gi, `### Nutrition`)
+    .replace(/\*\*Storage and Reheating Instructions:\*\*/gi, `### Storage & Reheating`);
+};
+
+function splitDays(markdown: string): { day: string, content: string }[] {
+  // Try to match headings like '## Day 1', '# Day 1', or even 'Day 1'
+  const regex = /(?:^|\n)(?:#+\s*)?(Day\s*\d+)[^\n]*\n/gi;
+  const matches = [];
+  let match;
+  let lastIndex = 0;
+  let lastDay = null;
+
+  while ((match = regex.exec(markdown)) !== null) {
+    if (lastDay !== null) {
+      matches.push({
+        day: lastDay,
+        content: markdown.slice(lastIndex, match.index).trim()
+      });
+    }
+    lastDay = match[1];
+    lastIndex = regex.lastIndex;
+  }
+  if (lastDay !== null) {
+    matches.push({
+      day: lastDay,
+      content: markdown.slice(lastIndex).trim()
+    });
+  }
+  // If no days found, return the whole markdown as one box
+  return matches.length ? matches : [{ day: 'Meal Plan', content: markdown }];
+}
+
+const mealIcons: Record<string, React.ReactNode> = {
+  Breakfast: <Apple className="inline mr-1 text-orange-500" size={18} />, // or use a breakfast icon
+  Lunch: <Utensils className="inline mr-1 text-blue-500" size={18} />, // or use a lunch icon
+  Dinner: <ChefHat className="inline mr-1 text-purple-500" size={18} />,
+};
+
+function splitMeals(dayContent: string, mealTypes: MealType[]): { meal: string, content: string }[] {
+  // Split by headings like '### Breakfast', '### Lunch', etc.
+  const mealRegex = /(?:^|\n)(?:#+\s*)?((?:Breakfast|Lunch|Dinner))[^\n]*\n/gi;
+  const matches = [];
+  let match;
+  let lastIndex = 0;
+  let lastMeal = null;
+  while ((match = mealRegex.exec(dayContent)) !== null) {
+    if (lastMeal !== null) {
+      matches.push({
+        meal: lastMeal,
+        content: dayContent.slice(lastIndex, match.index).trim()
+      });
+    }
+    lastMeal = match[1];
+    lastIndex = mealRegex.lastIndex;
+  }
+  if (lastMeal !== null) {
+    matches.push({
+      meal: lastMeal,
+      content: dayContent.slice(lastIndex).trim()
+    });
+  }
+  // Only return meals that are in the user's preferences
+  return matches.filter(m => mealTypes.includes(m.meal as MealType));
+}
+
+function removeAsterisksFromSections(markdown: string, sections: string[]): string {
+  for (const section of sections) {
+    const regex = new RegExp(`(\\*\\*${section}:\\*\\*[\\s\\S]*?)(\\n\\n|$)`, 'gi');
+    markdown = markdown.replace(regex, (match, p1, p2) => {
+      const cleanContent = p1.replace(/\\*/g, '');
+      return cleanContent + p2;
+    });
+  }
+  return markdown;
+}
+
+function removeMarkdownStarsFromSpecificSections(text: string, sections: string[]) {
+  for (const section of sections) {
+    const regex = new RegExp(`(\\*\\*${section}\\*\\*\\n)([\\s\\S]*?)(?=\\n\\*\\*|$)`, 'g');
+    text = text.replace(regex, (match, title, content) => {
+      const cleanedContent = content.replace(/\\*\\*/g, ''); // remove double asterisks
+      return title + cleanedContent;
+    });
+  }
+  return text;
+}
+
+function cleanMarkdown(md: string): string {
+  let cleaned = md.replace(/\[object Object\]/g, '');
+
+  // Tips for Success
+  cleaned = cleaned.replace(
+    /(\*\*|__)?Tips for Success(\*\*|__)?[:\s-]*([^\n]*)/gi,
+    '\n\n### Tips for Success\n$3'
+  );
+
+  // Nutrition
+  cleaned = cleaned.replace(
+    /(\*\*|__)?Nutrition[^\*]*?(\*\*|__)?[:\s-]*([^\n]*)/gi,
+    '\n\n### Nutrition\n$3'
+  );
+
+  // Break up recipe metadata into separate lines
+  cleaned = cleaned.replace(
+    /(Recipe Name:[^\n]*?)\s+Short Description:/gi,
+    '$1\nShort Description:'
+  );
+  cleaned = cleaned.replace(
+    /(Short Description:[^\n]*?)\s+Total Cooking Time:/gi,
+    '$1\nTotal Cooking Time:'
+  );
+  cleaned = cleaned.replace(
+    /(Total Cooking Time:[^\n]*?)\s+Servings:/gi,
+    '$1\nServings:'
+  );
+
+  // Ensure **Instructions:** or Instructions: is always on its own line
+  cleaned = cleaned.replace(/(\*\*Instructions:\*\*|Instructions:)/gi, '\n\n### Instructions\n\n');
+
+  // Remove extra blank lines
+  cleaned = cleaned
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n');
+
+  return cleaned;
+}
 
 const MealPlanner = () => {
   const [query, setQuery] = useState<string>('');
   const [response, setResponse] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [openMeals, setOpenMeals] = useState<Record<string, string | null>>({});
   const { preferences } = usePreferences();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!query.trim()) {
       toast.error('Please enter a meal planning query');
       return;
     }
-    
     setLoading(true);
-    
     try {
-      // Generate a meal plan based on preferences (frontend only)
-      const preferencesText = `
-Allergies: ${preferences.allergies.length > 0 ? preferences.allergies.join(', ') : 'None'}
-Cuisines: ${preferences.cuisines.length > 0 ? preferences.cuisines.join(', ') : 'Any'}
-Cooking Level: ${preferences.cookingLevel}
-Meal Frequency: ${preferences.mealFrequency}
-Leftovers to use: ${preferences.leftovers.length > 0 ? preferences.leftovers.join(', ') : 'None'}
-      `;
-      
-      // Since we're removing OpenAI functionality, we'll generate a mock response
-      setTimeout(() => {
-        const mockResponse = generateMockMealPlan(query, preferences);
-        setResponse(mockResponse);
-        setLoading(false);
-      }, 1500); // Simulate loading
-      
+      const result = await sendChatMessage(query, preferences);
+      setResponse(result.response);
     } catch (error) {
       console.error('Error:', error);
-      setResponse(`Error generating meal plan. Please try again.`);
+      toast.error('Failed to generate meal plan. Please try again.');
+      setResponse('');
+    } finally {
       setLoading(false);
     }
   };
 
-  const generateMockMealPlan = (query: string, preferences: any) => {
-    // Simple frontend-only meal plan generation based on preferences
-    
-    const mealIdeas = [
-      { name: "Vegetable Stir Fry", cuisine: "Asian", level: "Beginner" },
-      { name: "Spaghetti Bolognese", cuisine: "Italian", level: "Beginner" },
-      { name: "Grilled Chicken Salad", cuisine: "American", level: "Beginner" },
-      { name: "Beef Tacos", cuisine: "Mexican", level: "Beginner" },
-      { name: "Vegetable Curry", cuisine: "Indian", level: "Intermediate" },
-      { name: "Pad Thai", cuisine: "Thai", level: "Intermediate" },
-      { name: "Ratatouille", cuisine: "French", level: "Intermediate" },
-      { name: "Baked Salmon with Asparagus", cuisine: "European", level: "Intermediate" },
-      { name: "Beef Wellington", cuisine: "British", level: "Advanced" },
-      { name: "Soufflé", cuisine: "French", level: "Advanced" },
-      { name: "Sushi Rolls", cuisine: "Japanese", level: "Advanced" },
-      { name: "Beef Bourguignon", cuisine: "French", level: "Advanced" }
-    ];
-    
-    // Filter based on preferences
-    const filteredMeals = mealIdeas.filter(meal => {
-      // Filter by cooking level
-      if (preferences.cookingLevel === 'Beginner' && meal.level !== 'Beginner') return false;
-      if (preferences.cookingLevel === 'Intermediate' && meal.level === 'Advanced') return false;
-      
-      // Filter by cuisine if preferences exist
-      if (preferences.cuisines.length > 0 && !preferences.cuisines.some(c => meal.cuisine.toLowerCase().includes(c.toLowerCase()))) {
-        return false;
-      }
-      
-      return true;
-    });
-    
-    // Generate meal plan based on frequency
-    let mealPlanText = "";
-    
-    if (preferences.mealFrequency === 'Daily') {
-      mealPlanText = generateDailyPlan(filteredMeals, preferences);
-    } else if (preferences.mealFrequency === 'Weekly') {
-      mealPlanText = generateWeeklyPlan(filteredMeals, preferences);
-    } else {
-      mealPlanText = generateMonthlyPlan(filteredMeals, preferences);
-    }
-    
-    return mealPlanText;
-  };
-  
-  const generateDailyPlan = (meals: any[], preferences: any) => {
-    const selectedMeals = getRandomElements(meals, 3);
-    
-    let plan = `# Daily Meal Plan\n\n`;
-    plan += `Based on your preferences, here's a meal plan for today:\n\n`;
-    plan += `## Breakfast\n${selectedMeals[0]?.name || 'Oatmeal with fruits'}\n\n`;
-    plan += `## Lunch\n${selectedMeals[1]?.name || 'Mixed green salad with protein'}\n\n`;
-    plan += `## Dinner\n${selectedMeals[2]?.name || 'Baked chicken with vegetables'}\n\n`;
-    
-    if (preferences.leftovers.length > 0) {
-      plan += `## Using Leftovers\nRecipe ideas incorporating your leftovers (${preferences.leftovers.join(', ')}):\n`;
-      plan += `- ${getLeftoverRecipeIdea(preferences.leftovers[0])}\n`;
-      if (preferences.leftovers.length > 1) {
-        plan += `- ${getLeftoverRecipeIdea(preferences.leftovers[1])}\n`;
-      }
-      plan += `\n`;
-    }
-    
-    plan += `## Grocery List\n`;
-    plan += `- Proteins: Chicken, eggs\n`;
-    plan += `- Vegetables: Spinach, carrots, bell peppers\n`;
-    plan += `- Fruits: Bananas, apples\n`;
-    plan += `- Grains: Rice, pasta\n`;
-    plan += `- Dairy: Milk, cheese\n`;
-    
-    return plan;
-  };
-  
-  const generateWeeklyPlan = (meals: any[], preferences: any) => {
-    const selectedMeals = getRandomElements(meals, 7);
-    
-    let plan = `# Weekly Meal Plan\n\n`;
-    plan += `Based on your preferences, here's your meal plan for the week:\n\n`;
-    
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    
-    days.forEach((day, index) => {
-      plan += `## ${day}\n`;
-      plan += `- Dinner: ${selectedMeals[index]?.name || 'Chef\'s choice meal'}\n\n`;
-    });
-    
-    if (preferences.leftovers.length > 0) {
-      plan += `## Using Leftovers\nRecipe ideas incorporating your leftovers (${preferences.leftovers.join(', ')}):\n`;
-      preferences.leftovers.forEach((leftover: string) => {
-        plan += `- ${getLeftoverRecipeIdea(leftover)}\n`;
+  // Parse and clean days
+  let days = response ? splitDays(response) : [];
+  const expectedDays = preferences.mealFrequency === 'Monthly' ? 20 : 7;
+
+  // Helper: alternate unique days, never repeat consecutively
+  function buildAlternatingDays(blocks: typeof days, total: number) {
+    const result = [];
+    let lastIdx = -1;
+    for (let i = 0; i < total; i++) {
+      let idx = i % blocks.length;
+      // Ensure no two consecutive days are the same
+      if (idx === lastIdx) idx = (idx + 1) % blocks.length;
+      result.push({
+        day: `Day ${i + 1}`,
+        content: blocks[idx]?.content || 'No meal plan generated for this day.'
       });
-      plan += `\n`;
+      lastIdx = idx;
     }
-    
-    plan += `## Weekly Grocery List\n`;
-    plan += `- Proteins: Chicken, beef, fish, eggs\n`;
-    plan += `- Vegetables: Spinach, carrots, bell peppers, zucchini\n`;
-    plan += `- Fruits: Bananas, apples, berries\n`;
-    plan += `- Grains: Rice, pasta, bread\n`;
-    plan += `- Dairy: Milk, cheese, yogurt\n`;
-    
-    return plan;
-  };
-  
-  const generateMonthlyPlan = (meals: any[], preferences: any) => {
-    let plan = `# Monthly Meal Planning Guide\n\n`;
-    plan += `Based on your preferences, here's a framework for your monthly meal planning:\n\n`;
-    
-    plan += `## Week 1 Theme: Quick & Easy\n`;
-    plan += `- Meal ideas: Stir-fries, sheet pan dinners, pasta dishes\n\n`;
-    
-    plan += `## Week 2 Theme: International Flavors\n`;
-    if (preferences.cuisines.length > 0) {
-      plan += `- Featured cuisines: ${preferences.cuisines.join(', ')}\n\n`;
-    } else {
-      plan += `- Try dishes from Italian, Mexican, and Asian cuisines\n\n`;
+    return result;
+  }
+
+  if (preferences.mealFrequency === 'Weekly') {
+    // Use up to 4 unique days, alternate but never repeat consecutively
+    const uniqueBlocks = days.slice(0, 4);
+    days = buildAlternatingDays(uniqueBlocks, expectedDays);
+  } else if (preferences.mealFrequency === 'Monthly') {
+    // Use up to 2 unique weeks (5 days each), alternate weeks, never repeat consecutively
+    const weekBlocks = [];
+    for (let w = 0; w < 2; w++) {
+      weekBlocks.push(days.slice(w * 5, w * 5 + 5));
     }
-    
-    plan += `## Week 3 Theme: Batch Cooking\n`;
-    plan += `- Make large portions of freezer-friendly meals: chili, casseroles, soups\n\n`;
-    
-    plan += `## Week 4 Theme: New Recipes\n`;
-    plan += `- Challenge yourself with ${preferences.cookingLevel} level recipes\n\n`;
-    
-    if (preferences.leftovers.length > 0) {
-      plan += `## Using Leftovers\nRecipe ideas incorporating your leftovers (${preferences.leftovers.join(', ')}):\n`;
-      preferences.leftovers.forEach((leftover: string) => {
-        plan += `- ${getLeftoverRecipeIdea(leftover)}\n`;
-      });
-      plan += `\n`;
+    const result = [];
+    let lastWeekIdx = -1;
+    for (let w = 0; w < 4; w++) {
+      let weekIdx = w % weekBlocks.length;
+      if (weekIdx === lastWeekIdx) weekIdx = (weekIdx + 1) % weekBlocks.length;
+      for (let d = 0; d < 5; d++) {
+        const block = weekBlocks[weekIdx][d];
+        result.push({
+          day: `Day ${w * 5 + d + 1}`,
+          content: block?.content || 'No meal plan generated for this day.'
+        });
+      }
+      lastWeekIdx = weekIdx;
     }
-    
-    plan += `## Monthly Staples Shopping List\n`;
-    plan += `- Pantry: Rice, pasta, canned beans, spices\n`;
-    plan += `- Freezer: Frozen vegetables, protein portions\n`;
-    plan += `- Weekly fresh items: Vegetables, fruits, dairy\n`;
-    
-    return plan;
-  };
-  
-  const getLeftoverRecipeIdea = (leftover: string) => {
-    const ideas: {[key: string]: string} = {
-      'rice': 'Fried rice with vegetables',
-      'chicken': 'Chicken salad wraps',
-      'pasta': 'Pasta frittata with herbs',
-      'bread': 'Homemade croutons or breadcrumbs',
-      'vegetables': 'Vegetable soup or stock',
-      'potatoes': 'Potato pancakes',
-      'beans': 'Bean and corn salad',
-      'cheese': 'Cheese quesadillas with herbs'
-    };
-    
-    return ideas[leftover.toLowerCase()] || `${leftover} stir-fry or add to soups`;
-  };
-  
-  const getRandomElements = (array: any[], count: number) => {
-    const shuffled = [...array].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
-  };
+    days = result;
+  } else {
+    // If not enough days, repeat previous day for alternate days (fallback)
+    if (days.length < expectedDays) {
+      const filledDays = [];
+      for (let i = 0; i < expectedDays; i++) {
+        // Always use the last available real day if not enough unique days
+        const idx = i < days.length ? i : days.length - 1;
+        filledDays.push({
+          day: `Day ${i + 1}`,
+          content: days[idx]?.content || ''
+        });
+      }
+      days = filledDays;
+    }
+  }
+
+  // Only show day boxes if at least one real meal plan is generated
+  const hasRealPlan = days.some(d => d.content && !/No meal plan generated/i.test(d.content));
 
   return (
     <div className="space-y-6 w-full max-w-4xl mx-auto">
@@ -217,7 +253,6 @@ Leftovers to use: ${preferences.leftovers.length > 0 ? preferences.leftovers.joi
           <TabsTrigger value="planner">Meal Planner</TabsTrigger>
           <TabsTrigger value="preferences">Preferences</TabsTrigger>
         </TabsList>
-        
         <TabsContent value="planner" className="mt-4 space-y-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <Textarea
@@ -238,24 +273,102 @@ Leftovers to use: ${preferences.leftovers.length > 0 ? preferences.leftovers.joi
             </Button>
           </form>
 
-          {response && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Meal Plan</CardTitle>
-                <CardDescription>
-                  Based on your preferences and query
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="whitespace-pre-wrap">
-                  {response}
-                </div>
-              </CardContent>
-            </Card>
+          {hasRealPlan && (
+            <div className="space-y-8">
+              {days.map((dayObj, idx) => {
+                const meals = splitMeals(cleanMarkdown(dayObj.content), preferences.mealTypes);
+                return (
+                  <div
+                    key={idx}
+                    className="rounded-xl shadow-lg border-2 border-green-200 bg-white"
+                  >
+                    <div className="p-4 bg-green-50 rounded-t-xl border-b border-green-200 flex flex-col gap-2">
+                      <span className="font-bold text-lg text-green-800">{dayObj.day}</span>
+                      <div className="flex flex-wrap gap-3 items-center">
+                        {meals.map((m, i) => (
+                          <span key={i} className="px-3 py-1 rounded-full bg-green-100 text-green-700 flex items-center gap-1 text-sm font-medium">
+                            {mealIcons[m.meal]}
+                            {m.meal}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="divide-y divide-green-100">
+                      {meals.length === 0 && (
+                        <div className="p-4 text-gray-500">No meal plan generated for this day.</div>
+                      )}
+                      {meals.map((m, i) => (
+                        <div key={i}>
+                          <button
+                            className="w-full text-left px-6 py-3 flex items-center gap-2 hover:bg-green-50 focus:outline-none"
+                            onClick={() => setOpenMeals(prev => ({ ...prev, [dayObj.day]: prev[dayObj.day] === m.meal ? null : m.meal }))}
+                            type="button"
+                          >
+                            <span className="font-semibold text-green-700 flex items-center gap-2">
+                              {mealIcons[m.meal]} {m.meal}
+                            </span>
+                            <span className="ml-auto text-green-400">{openMeals[dayObj.day] === m.meal ? '▼' : '▶'}</span>
+                          </button>
+                          {openMeals[dayObj.day] === m.meal && (
+                            <div className="p-4 bg-gradient-to-br from-green-50 to-blue-50">
+                              {(() => {
+                                const noStarsText = removeMarkdownStarsFromSpecificSections(
+                                  cleanMarkdown(m.content),
+                                  ['Tips for Success', 'Nutrition']
+                                );
+                                const finalText = highlightSection(noStarsText);
+                                return (
+                                  <ReactMarkdown
+                                    remarkPlugins={[remarkGfm]}
+                                    components={{
+                                      h3({ node, ...props }) {
+                                        const text = React.Children.toArray(props.children).join('').trim();
+                                        const iconMap: Record<string, React.ReactNode> = {
+                                          Ingredients: <Apple className="inline mr-2 text-green-600" size={20} />,
+                                          Instructions: <Utensils className="inline mr-2 text-blue-600" size={20} />,
+                                          "Tips for Success": <Lightbulb className="inline mr-2 text-yellow-500" size={20} />,
+                                          Nutrition: <Info className="inline mr-2 text-pink-500" size={20} />,
+                                          "Storage & Reheating": <Refrigerator className="inline mr-2 text-cyan-600" size={20} />,
+                                        };
+                                        const icon = iconMap[text] || null;
+                                        return (
+                                          <h3 className="text-lg font-semibold mt-4 mb-2 flex items-center">
+                                            {icon} <span>{text}</span>
+                                          </h3>
+                                        );
+                                      },
+                                      ul({ node, ...props }) {
+                                        return (
+                                          <ul className="list-disc list-inside space-y-1 text-base text-gray-800">
+                                            {props.children}
+                                          </ul>
+                                        );
+                                      },
+                                      li({ node, ...props }) {
+                                        return (
+                                          <li className="leading-relaxed">
+                                            {props.children}
+                                          </li>
+                                        );
+                                      },
+                                    }}
+                                  >
+                                    {finalText}
+                                  </ReactMarkdown>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </TabsContent>
-        
-        <TabsContent value="preferences" className="mt-4">
+        <TabsContent value="preferences">
           <PreferencesForm />
         </TabsContent>
       </Tabs>

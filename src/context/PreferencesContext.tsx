@@ -1,9 +1,9 @@
-
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 // Define types for our preferences
 export type CookingLevel = 'Beginner' | 'Intermediate' | 'Advanced';
 export type MealFrequency = 'Daily' | 'Weekly' | 'Monthly';
+export type MealType = 'Breakfast' | 'Lunch' | 'Dinner';
 
 export interface Preferences {
   allergies: string[];
@@ -11,6 +11,7 @@ export interface Preferences {
   cookingLevel: CookingLevel;
   mealFrequency: MealFrequency;
   leftovers: string[];
+  mealTypes: MealType[];
 }
 
 // Default preferences state
@@ -20,6 +21,7 @@ const defaultPreferences: Preferences = {
   cookingLevel: 'Beginner',
   mealFrequency: 'Weekly',
   leftovers: [],
+  mealTypes: ['Breakfast', 'Lunch', 'Dinner'],
 };
 
 // Create the context

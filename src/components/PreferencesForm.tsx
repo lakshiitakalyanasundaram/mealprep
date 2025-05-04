@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { usePreferences, CookingLevel, MealFrequency } from '../context/PreferencesContext';
+import { usePreferences, CookingLevel, MealFrequency, MealType } from '../context/PreferencesContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +15,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { Checkbox } from '@/components/ui/checkbox';
 
 // Common allergens
 const commonAllergens = [
@@ -34,6 +34,8 @@ const commonLeftovers = [
   "Rice", "Pasta", "Chicken", "Beef", "Vegetables",
   "Bread", "Beans", "Potatoes", "Tofu", "Fish"
 ];
+
+const mealTypeOptions: MealType[] = ['Breakfast', 'Lunch', 'Dinner'];
 
 const PreferencesForm: React.FC = () => {
   const {
@@ -321,6 +323,34 @@ const PreferencesForm: React.FC = () => {
               <SelectItem value="Monthly">Monthly</SelectItem>
             </SelectContent>
           </Select>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Utensils className="h-5 w-5" />
+            Select Meals (per day)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-6">
+            {mealTypeOptions.map((type) => (
+              <label key={type} className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={preferences.mealTypes.includes(type)}
+                  onCheckedChange={(checked) => {
+                    const newTypes = checked
+                      ? [...preferences.mealTypes, type]
+                      : preferences.mealTypes.filter((t) => t !== type);
+                    updatePreferences({ mealTypes: newTypes });
+                  }}
+                  id={`mealtype-${type}`}
+                />
+                {type}
+              </label>
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>
