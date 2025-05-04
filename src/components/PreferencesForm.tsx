@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Allergy, UtensilsCrossed, ChefHat, CalendarDays } from 'lucide-react';
+import { AlertCircle, Utensils, ChefHat, CalendarDays } from 'lucide-react';
 import { toast } from "sonner";
 
 const PreferencesForm: React.FC = () => {
@@ -67,7 +67,7 @@ const PreferencesForm: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Allergy className="h-5 w-5" />
+            <AlertCircle className="h-5 w-5" />
             Allergies
           </CardTitle>
         </CardHeader>
@@ -137,7 +137,7 @@ const PreferencesForm: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <UtensilsCrossed className="h-5 w-5" />
+            <Utensils className="h-5 w-5" />
             Leftovers
           </CardTitle>
         </CardHeader>
