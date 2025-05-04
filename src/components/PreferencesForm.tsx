@@ -10,6 +10,30 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, Utensils, ChefHat, CalendarDays } from 'lucide-react';
 import { toast } from "sonner";
+import { 
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+
+// Common allergens
+const commonAllergens = [
+  "Peanuts", "Tree Nuts", "Milk", "Eggs", "Fish",
+  "Shellfish", "Wheat", "Soy", "Sesame"
+];
+
+// Common cuisines
+const commonCuisines = [
+  "Italian", "Mexican", "Chinese", "Japanese", "Indian",
+  "Thai", "Mediterranean", "French", "American", "Greek"
+];
+
+// Common leftovers
+const commonLeftovers = [
+  "Rice", "Pasta", "Chicken", "Beef", "Vegetables",
+  "Bread", "Beans", "Potatoes", "Tofu", "Fish"
+];
 
 const PreferencesForm: React.FC = () => {
   const {
@@ -62,6 +86,33 @@ const PreferencesForm: React.FC = () => {
     updatePreferences({ mealFrequency: value as MealFrequency });
   };
 
+  const handleQuickAddAllergy = (allergy: string) => {
+    if (!preferences.allergies.includes(allergy)) {
+      addAllergy(allergy);
+      toast.success(`Added allergy: ${allergy}`);
+    } else {
+      toast.info(`${allergy} is already in your allergies list`);
+    }
+  };
+
+  const handleQuickAddCuisine = (cuisine: string) => {
+    if (!preferences.cuisines.includes(cuisine)) {
+      addCuisine(cuisine);
+      toast.success(`Added cuisine: ${cuisine}`);
+    } else {
+      toast.info(`${cuisine} is already in your cuisines list`);
+    }
+  };
+
+  const handleQuickAddLeftover = (leftover: string) => {
+    if (!preferences.leftovers.includes(leftover)) {
+      addLeftover(leftover);
+      toast.success(`Added leftover: ${leftover}`);
+    } else {
+      toast.info(`${leftover} is already in your leftovers list`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -72,15 +123,33 @@ const PreferencesForm: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAddAllergy} className="flex gap-2 mb-4">
-            <Input
-              placeholder="Enter allergy (e.g., peanuts)"
-              value={newAllergy}
-              onChange={(e) => setNewAllergy(e.target.value)}
-              className="flex-1"
-            />
-            <Button type="submit">Add</Button>
-          </form>
+          <div className="flex gap-2 mb-4">
+            <form onSubmit={handleAddAllergy} className="flex gap-2 flex-1">
+              <Input
+                placeholder="Enter allergy (e.g., peanuts)"
+                value={newAllergy}
+                onChange={(e) => setNewAllergy(e.target.value)}
+                className="flex-1"
+              />
+              <Button type="submit">Add</Button>
+            </form>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">Quick Add</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 bg-white">
+                {commonAllergens.map((allergen) => (
+                  <DropdownMenuItem 
+                    key={allergen}
+                    onClick={() => handleQuickAddAllergy(allergen)}
+                  >
+                    {allergen}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <div className="flex flex-wrap gap-2">
             {preferences.allergies.map((allergy) => (
               <Badge 
@@ -107,15 +176,33 @@ const PreferencesForm: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAddCuisine} className="flex gap-2 mb-4">
-            <Input
-              placeholder="Enter cuisine (e.g., Italian)"
-              value={newCuisine}
-              onChange={(e) => setNewCuisine(e.target.value)}
-              className="flex-1"
-            />
-            <Button type="submit">Add</Button>
-          </form>
+          <div className="flex gap-2 mb-4">
+            <form onSubmit={handleAddCuisine} className="flex gap-2 flex-1">
+              <Input
+                placeholder="Enter cuisine (e.g., Italian)"
+                value={newCuisine}
+                onChange={(e) => setNewCuisine(e.target.value)}
+                className="flex-1"
+              />
+              <Button type="submit">Add</Button>
+            </form>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">Quick Add</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 bg-white">
+                {commonCuisines.map((cuisine) => (
+                  <DropdownMenuItem 
+                    key={cuisine}
+                    onClick={() => handleQuickAddCuisine(cuisine)}
+                  >
+                    {cuisine}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <div className="flex flex-wrap gap-2">
             {preferences.cuisines.map((cuisine) => (
               <Badge 
@@ -142,15 +229,33 @@ const PreferencesForm: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAddLeftover} className="flex gap-2 mb-4">
-            <Input
-              placeholder="Enter leftover ingredients (e.g., rice)"
-              value={newLeftover}
-              onChange={(e) => setNewLeftover(e.target.value)}
-              className="flex-1"
-            />
-            <Button type="submit">Add</Button>
-          </form>
+          <div className="flex gap-2 mb-4">
+            <form onSubmit={handleAddLeftover} className="flex gap-2 flex-1">
+              <Input
+                placeholder="Enter leftover ingredients (e.g., rice)"
+                value={newLeftover}
+                onChange={(e) => setNewLeftover(e.target.value)}
+                className="flex-1"
+              />
+              <Button type="submit">Add</Button>
+            </form>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">Quick Add</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 bg-white">
+                {commonLeftovers.map((leftover) => (
+                  <DropdownMenuItem 
+                    key={leftover}
+                    onClick={() => handleQuickAddLeftover(leftover)}
+                  >
+                    {leftover}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <div className="flex flex-wrap gap-2">
             {preferences.leftovers.map((leftover) => (
               <Badge 
